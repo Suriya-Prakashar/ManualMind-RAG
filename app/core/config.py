@@ -1,0 +1,50 @@
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+# Load .env
+load_dotenv()
+
+# ============================
+# Project Paths
+# ============================
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+DATA_DIR = BASE_DIR / "data"
+
+MANUAL_DIR = DATA_DIR / "manuals"
+
+VECTORSTORE_DIR = DATA_DIR / "vectorstore"
+
+MANUAL_DIR.mkdir(parents=True, exist_ok=True)
+
+VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
+
+# ============================
+# API Keys
+# ============================
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# ============================
+# Models
+# ============================
+
+GEMINI_MODEL = "gemini/gemini-2.5-flash"
+
+GROQ_MODEL = "groq/llama-3.1-8b-instant"
+
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+# ============================
+# RAG
+# ============================
+
+CHUNK_SIZE = 800
+
+CHUNK_OVERLAP = 150
+
+TOP_K = 3
