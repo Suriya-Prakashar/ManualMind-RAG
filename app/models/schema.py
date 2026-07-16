@@ -8,4 +8,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
 
-    answer: str
+    replay: str
+    provider: str
+    model: str
+    fallback: bool

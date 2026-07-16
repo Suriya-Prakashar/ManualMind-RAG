@@ -1,13 +1,20 @@
 from fastapi import APIRouter
+from app.services.fallback import FallbackService
 
-from app.models.schema import ChatRequest
-from app.models.schema import ChatResponse
+fallback = FallbackService()
+from app.models.schema import (
+    ChatRequest,
+    ChatResponse
+)
+
+from app.services.llm import LLMService
 
 router = APIRouter()
 
+llm = LLMService()
+
 
 @router.get("/")
-
 def health():
 
     return {
@@ -16,10 +23,16 @@ def health():
     }
 
 
-@router.post("/chat", response_model=ChatResponse)
-
+@router.post(
+    "/chat",
+    response_model=ChatResponse
+)
 def chat(request: ChatRequest):
 
+    answer = fallback.generate(
+    request.question
+    )
+
     return ChatResponse(
-        answer=f"You asked: {request.question}"
+        answer=answer
     )

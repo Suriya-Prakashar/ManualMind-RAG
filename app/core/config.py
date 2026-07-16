@@ -33,10 +33,21 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # Models
 # ============================
 
-GEMINI_MODEL = "gemini/gemini-2.5-flash"
-
+GEMINI_MODEL = "gemini/gemini-1.5-flash"
 GROQ_MODEL = "groq/llama-3.1-8b-instant"
 
+FALLBACK_CHAIN = [
+    {
+        "provider": "Gemini",
+        "model": GEMINI_MODEL,
+        "api_key": GEMINI_API_KEY
+    },
+    {
+        "provider": "Groq",
+        "model": GROQ_MODEL,
+        "api_key": GROQ_API_KEY
+    }
+]
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
 # ============================
