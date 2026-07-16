@@ -29,11 +29,19 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# ===========================
+# Retry Configuration
+# ===========================
+
+MAX_RETRIES = 3
+
+RETRY_DELAY = 2  # seconds
+
 # ============================
 # Models
 # ============================
 
-GEMINI_MODEL = "gemini/gemini-1.5-flash"
+GEMINI_MODEL = "gemini/gemini-3.5-flash"
 GROQ_MODEL = "groq/llama-3.1-8b-instant"
 
 FALLBACK_CHAIN = [

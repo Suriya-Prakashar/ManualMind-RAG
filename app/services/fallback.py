@@ -1,67 +1,76 @@
-
+import time
 from litellm import completion
-
-from app.core.config import FALLBACK_CHAIN
+from app.core.config import FALLBACK_CHAIN, MAX_RETRIES, RETRY_DELAY
 from app.core.prompt import SYSTEM_PROMPT
 
 
 class FallbackService:
 
-    def generate(self, question: str) -> dict:
+    def generate(self, question: str):
 
         last_error = None
 
+        # Loop through providers
         for idx, provider in enumerate(FALLBACK_CHAIN):
 
-            try:
+            # Retry same provider
+            for attempt in range(1, MAX_RETRIES + 1):
 
-                print(
-                    f"Trying {provider['provider']}..."
-                )
+                try:
 
-                response = completion(
+                    print(
+                        f"[{provider['model']}] Attempt {attempt}/{MAX_RETRIES}"
+                    )
 
-                    model=provider["model"],
+                    response = completion(
+                        model=provider["model"],
+                        api_key=provider["api_key"],
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": SYSTEM_PROMPT
+                            },
+                            {
+                                "role": "user",
+                                "content": question
+                            }
+                        ],
+                        temperature=0.3
+                    )
 
-                    api_key=provider["api_key"],
+                    print(
+                        f"{provider['model']} Success"
+                    )
 
-                    messages=[
+                    return {
+                        "reply": response.choices[0].message.content,
+                        "provider": provider["provider"],
+                        "model": provider["model"],
+                        "fallback": idx > 0
+                    }
 
-                        {
-                            "role": "system",
-                            "content": SYSTEM_PROMPT
-                        },
+                except Exception as e:
 
-                        {
-                            "role": "user",
-                            "content": question
-                        }
+                    last_error = e
 
-                    ],
+                    print(
+                        f"{provider['model']} Failed (Attempt {attempt})"
+                    )
 
-                    temperature=0.3
+                    if attempt < MAX_RETRIES:
 
-                )
+                        print(
+                            f"Retrying in {RETRY_DELAY} seconds..."
+                        )
 
-                print(
-                    f"{provider['provider']} Success"
-                )
+                        time.sleep(RETRY_DELAY)
 
-                return {
-                    'replay': response.choices[0].message.content,
-                    'provider': provider['provider'],
-                    'model': provider['model'],
-                    'fallback': idx > 0
-                }
+            print(
+                f"Switching to next provider..."
+            )
 
-            except Exception as e:
-
-                print(
-                    f"{provider['provider']} Failed"
-                )
-
-                last_error = e
-
-        raise Exception(last_error)
+        raise Exception(
+            f"All providers failed.\n{last_error}"
+        )
 
       

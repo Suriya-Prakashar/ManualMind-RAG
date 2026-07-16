@@ -30,7 +30,7 @@ class LLMService:
 
 
         return {
-            'replay': response.choices[0].message.content,
+            'reply': response.choices[0].message.content,
             'provider': 'Groq',
             'model': GROQ_MODEL,
             'fallback': False
