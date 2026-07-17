@@ -34,6 +34,7 @@ def chat(request: ChatRequest, response: Response, stream: bool = None):
         {
             "page": c["page"],
             "chunk_index": c["chunk_index"],
+            "chunk_id": c.get("chunk_id"),
             "text": c["text"],
             "score": c.get("score", 0.0)
         }

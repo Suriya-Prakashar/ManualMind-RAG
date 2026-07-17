@@ -90,9 +90,10 @@ class TextChunker:
         Args:
             pages: List of dicts, e.g. [{"page": 1, "text": "..."}]
         Returns:
-            List of dicts, e.g. [{"page": 1, "chunk_index": 0, "text": "..."}]
+            List of dicts, e.g. [{"page": 1, "chunk_index": 0, "chunk_id": 0, "text": "..."}]
         """
         chunks = []
+        global_id = 0
 
         for page in pages:
             page_num = page["page"]
@@ -103,8 +104,10 @@ class TextChunker:
                 chunks.append({
                     "page": page_num,
                     "chunk_index": 0,
+                    "chunk_id": global_id,
                     "text": text
                 })
+                global_id += 1
                 continue
 
             # Sliding window chunking
@@ -117,10 +120,12 @@ class TextChunker:
                 chunks.append({
                     "page": page_num,
                     "chunk_index": chunk_index,
+                    "chunk_id": global_id,
                     "text": chunk_text
                 })
 
                 chunk_index += 1
+                global_id += 1
                 start += self.chunk_size - self.chunk_overlap
 
                 # Prevent infinite loop if overlap is larger than or equal to chunk size

@@ -65,7 +65,7 @@ def main():
         print("=" * 80)
         for idx, chunk in enumerate(chunks):
             print(f"PAGE NUMBER: {chunk['page']}")
-            print(f"CHUNK ID: {chunk.get('chunk_index', idx)}")
+            print(f"CHUNK ID: {chunk.get('chunk_id', idx)}")
             print(f"SIMILARITY SCORE: {chunk.get('score', 0.0):.4f}")
             print("-" * 80)
             print("CHUNK CONTENT:")

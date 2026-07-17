@@ -37,6 +37,7 @@ class Retriever:
             chunk = metadata[index].copy()
 
             chunk["score"] = float(score)
+            chunk["chunk_id"] = chunk.get("chunk_id", int(index))
 
             results.append(chunk)
 

@@ -65,6 +65,6 @@ CHUNK_SIZE = 800
 
 CHUNK_OVERLAP = 150
 
-TOP_K = 6
+TOP_K = 3
 
 print (DATA_DIR)
