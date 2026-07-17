@@ -17,9 +17,8 @@ MANUAL_DIR = DATA_DIR / "manuals"
 
 VECTORSTORE_DIR = DATA_DIR / "vectorstore"
 
-MANUAL_DIR.mkdir(parents=True, exist_ok=True)
-
-VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
+# Path to the PDF manual (supports environment variable override)
+PDF_PATH = Path(os.getenv("PDF_PATH", MANUAL_DIR / "GB6-14_RepairGuide_EU_Eng_Rev.1.0_260403.pdf"))
 
 # ============================
 # API Keys
@@ -67,3 +66,5 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
 TOP_K = 3
+
+print (DATA_DIR)

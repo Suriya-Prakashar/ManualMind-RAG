@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 
 
 class ChatRequest(BaseModel):
@@ -8,7 +9,4 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
-    provider: str
-    model: str
-    fallback: bool
-    stream: bool
+    sources: Optional[List[Dict[str, Any]]] = None

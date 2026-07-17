@@ -6,9 +6,13 @@ from app.core.prompt import SYSTEM_PROMPT
 
 class FallbackService:
 
-    def generate(self, question: str):
+    def generate(self, question: str, context: str = None):
 
         last_error = None
+
+        user_content = question
+        if context:
+            user_content = f"Use the following context to answer the question:\n{context}\n\nQuestion: {question}"
 
         # Loop through providers
         for idx, provider in enumerate(FALLBACK_CHAIN):
@@ -32,7 +36,7 @@ class FallbackService:
                             },
                             {
                                 "role": "user",
-                                "content": question
+                                "content": user_content
                             }
                         ],
                         temperature=0.3
