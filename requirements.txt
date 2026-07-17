@@ -3,3 +3,8 @@ uvicorn
 litellm
 python-dotenv
 pydantic
+pymupdf
+faiss-cpu
+sentence-transformers
+numpy
+httpx

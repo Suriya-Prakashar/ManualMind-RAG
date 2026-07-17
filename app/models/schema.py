@@ -1,14 +1,11 @@
 from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 
 
 class ChatRequest(BaseModel):
     question: str
-    stream: bool = False
 
 
 class ChatResponse(BaseModel):
     reply: str
-    provider: str
-    model: str
-    fallback: bool
-    stream: bool
+    sources: Optional[List[Dict[str, Any]]] = None
