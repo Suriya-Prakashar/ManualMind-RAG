@@ -21,10 +21,9 @@ def health():
 
 
 @router.post(
-    "/chat",
-    response_model=ChatResponse
+    "/chat"
 )
-def chat(request: ChatRequest, response: Response, stream: bool = False):
+def chat(request: ChatRequest, response: Response, stream: bool = None):
     # Retrieve context and sources using RAG
     print(f"[DEBUG] Retrieving context for question: {request.question}")
     chunks = rag_pipeline.query(request.question)
@@ -41,10 +40,13 @@ def chat(request: ChatRequest, response: Response, stream: bool = False):
     ]
     print(f"[DEBUG] Retrieved {len(sources)} sources from vector store.")
 
+    # Determine if we should stream (query parameter override, fallback to request body)
+    should_stream = stream if stream is not None else request.stream
+
     # -------------------------
     # Streaming Response
     # -------------------------
-    if stream:
+    if should_stream:
         print("[DEBUG] Streaming function is working properly. Establishing stream...")
         provider_info, stream_iter, first_chunk = streaming.get_stream_iterator(request.question, context=context)
         
