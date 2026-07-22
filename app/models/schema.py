@@ -4,7 +4,6 @@ from typing import List, Dict, Any, Optional
 
 class ChatRequest(BaseModel):
     question: str
-    stream: bool = False
 
 
 class ChatResponse(BaseModel):
