@@ -40,7 +40,7 @@ RETRY_DELAY = 2  # seconds
 # Models
 # ============================
 
-GEMINI_MODEL = "gemini/gemini-3.5-flash"
+GEMINI_MODEL = "gemini/gemini-1.5-flash"
 GROQ_MODEL = "groq/llama-3.1-8b-instant"
 
 FALLBACK_CHAIN = [
@@ -65,6 +65,6 @@ CHUNK_SIZE = 800
 
 CHUNK_OVERLAP = 150
 
-TOP_K = 3
+TOP_K = 5
 
 print (DATA_DIR)

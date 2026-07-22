@@ -24,7 +24,7 @@ def health():
 @router.post(
     "/chat"
 )
-def chat(request: ChatRequest, response: Response, stream: bool = None):
+def chat(request: ChatRequest, response: Response):
     # Retrieve context and sources using RAG
     print(f"[DEBUG] Retrieving context for question: {request.question}")
     chunks = rag_pipeline.query(request.question)
@@ -42,14 +42,36 @@ def chat(request: ChatRequest, response: Response, stream: bool = None):
     ]
     print(f"[DEBUG] Retrieved {len(sources)} sources from vector store.")
 
-    # Determine if we should stream (query parameter override, fallback to request body)
-    should_stream = stream if stream is not None else request.stream
+    should_stream = False
 
     # -------------------------
-    # Streaming Response
+    # Normal Response (Default)
+    # -------------------------
+    if not should_stream:
+        print("[DEBUG] Generating normal JSON response...")
+        try:
+            answer_dict = fallback.generate(request.question, context=context)
+            reply = answer_dict["reply"]
+            provider = answer_dict["provider"]
+            model = answer_dict["model"]
+            fallback_used = str(answer_dict["fallback"]).lower()
+            
+            response.headers["X-RAG-Provider"] = provider
+            response.headers["X-RAG-Model"] = model
+            response.headers["X-RAG-Fallback"] = fallback_used
+            response.headers["X-RAG-Stream"] = "false"
+            
+            print(f"[DEBUG] Generated normal response using provider: {provider}, model: {model}")
+            return ChatResponse(reply=reply, sources=sources)
+        except Exception as e:
+            print(f"[WARNING] Normal response failed ({e}). Automatically activating streaming fallback...")
+            should_stream = True
+
+    # -------------------------
+    # Streaming Response (Fallback or Explicit)
     # -------------------------
     if should_stream:
-        print("[DEBUG] Streaming function is working properly. Establishing stream...")
+        print("[DEBUG] Establishing streaming response...")
         try:
             provider_info, stream_iter, first_chunk = streaming.get_stream_iterator(request.question, context=context)
             
@@ -82,28 +104,3 @@ def chat(request: ChatRequest, response: Response, stream: bool = None):
                 media_type="application/x-ndjson",
                 headers=headers
             )
-
-    # -------------------------
-    # Normal Response
-    # -------------------------
-    print("[DEBUG] Normal response function is working properly. Generating response...")
-    try:
-        answer_dict = fallback.generate(request.question, context=context)
-        reply = answer_dict["reply"]
-        provider = answer_dict["provider"]
-        model = answer_dict["model"]
-        fallback_used = str(answer_dict["fallback"]).lower()
-    except Exception as e:
-        reply = f"Error generating answer: {e}"
-        provider = "None"
-        model = "None"
-        fallback_used = "false"
-    
-    # Inject metadata into response headers instead of response body
-    response.headers["X-RAG-Provider"] = provider
-    response.headers["X-RAG-Model"] = model
-    response.headers["X-RAG-Fallback"] = fallback_used
-    response.headers["X-RAG-Stream"] = "false"
-    
-    print(f"[DEBUG] Generated response successfully using provider: {provider}, model: {model}")
-    return ChatResponse(reply=reply, sources=sources)
