@@ -1,34 +1,47 @@
 from sentence_transformers import SentenceTransformer
+
 from app.core.config import EMBEDDING_MODEL
 
 
 class Embedder:
+    """
+    Load the embedding model once and reuse it.
+    """
+
     def __init__(self):
         print("Loading embedding model...")
         self.model = SentenceTransformer(EMBEDDING_MODEL)
         print("Embedding model loaded successfully.")
 
-    def embed_text(self, text):
+    def embed_text(self, text: str):
         """
         Generate an embedding for a single text.
         """
-        embedding = self.model.encode(
+        return self.model.encode(
             text,
-            normalize_embeddings=True
+            normalize_embeddings=True,
         )
 
-        return embedding
-
-    def embed_chunks(self, chunks):
+    def embed_documents(self, chunks: list):
         """
-        Generate embeddings for all chunks.
+        Generate embeddings and attach them to chunk metadata.
         """
         texts = [chunk["text"] for chunk in chunks]
 
         embeddings = self.model.encode(
             texts,
             normalize_embeddings=True,
-            show_progress_bar=True
+            show_progress_bar=True,
         )
 
-        return embeddings
+        results = []
+
+        for chunk, embedding in zip(chunks, embeddings):
+            results.append(
+                {
+                    **chunk,
+                    "embedding": embedding,
+                }
+            )
+
+        return results

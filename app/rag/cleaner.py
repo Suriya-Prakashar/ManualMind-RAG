@@ -1,135 +1,145 @@
 import re
+
 from app.core.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
 def remove_layout_newlines(text: str) -> str:
     """
-    Removes layout newlines (sentence wrap newlines) while preserving 
-    paragraph breaks and list item beginnings.
+    Remove layout-based line breaks while preserving paragraphs and lists.
     """
-    # Normalize line endings
+
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    
+
     lines = text.split("\n")
     cleaned_lines = []
-    
+
     for line in lines:
         line = line.strip()
+
         if not line:
             cleaned_lines.append("")
             continue
-            
-        # Detect if it starts with a list marker (e.g. "1.", "-", "*", "•")
-        is_list_start = re.match(r"^(\d+\.|[•\-*])", line)
-        
-        if is_list_start or not cleaned_lines:
+
+        is_list = re.match(r"^(\d+\.|[•\-*])", line)
+
+        if is_list or not cleaned_lines or cleaned_lines[-1] == "":
             cleaned_lines.append(line)
         else:
-            # If the previous line is empty, start a new line
-            if cleaned_lines[-1] == "":
-                cleaned_lines.append(line)
-            else:
-                # Merge with previous line
-                cleaned_lines[-1] = cleaned_lines[-1] + " " + line
-                
-    result = "\n".join(cleaned_lines)
-    # Collapse multiple blank lines
-    result = re.sub(r"\n{3,}", "\n\n", result)
-    return result
+            cleaned_lines[-1] += f" {line}"
+
+    text = "\n".join(cleaned_lines)
+
+    return re.sub(r"\n{3,}", "\n\n", text)
 
 
-class TextCleaner:
+def clean_text(text: str) -> str:
     """
-    Clean extracted PDF text while preserving page numbers.
+    Clean extracted PDF text.
     """
 
-    def clean(self, pages: list):
+    # Remove non-printable characters
+    text = "".join(
+        ch for ch in text
+        if ch.isprintable() or ch in "\n\r\t"
+    )
 
-        cleaned_pages = []
+    text = remove_layout_newlines(text)
 
-        for page in pages:
+    # Remove multiple spaces
+    text = re.sub(r"[ \t]+", " ", text)
 
-            text = page.get("text", "")
-
-            # Remove non-printable control characters and invalid Unicode chars
-            text = "".join(ch for ch in text if ch.isprintable() or ch in "\n\r\t")
-
-            # Clean layout-based wrapped newlines
-            text = remove_layout_newlines(text)
-
-            # Remove extra spaces and tabs
-            text = re.sub(r"[ \t]+", " ", text)
-
-            # Remove leading and trailing spaces
-            text = text.strip()
-
-            # Skip empty pages
-            if text:
-
-                cleaned_pages.append(
-                    {
-                        "page": page["page"],
-                        "text": text
-                    }
-                )
-
-        return cleaned_pages
+    return text.strip()
 
 
-class TextChunker:
+def chunk_text(
+    text: str,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+):
     """
-    Split cleaned page text into chunks of specified size and overlap.
+    Split text into overlapping chunks.
     """
 
-    def __init__(self, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
+    if overlap >= chunk_size:
+        raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE.")
 
-    def chunk(self, pages: list) -> list:
-        """
-        Args:
-            pages: List of dicts, e.g. [{"page": 1, "text": "..."}]
-        Returns:
-            List of dicts, e.g. [{"page": 1, "chunk_index": 0, "chunk_id": 0, "text": "..."}]
-        """
-        chunks = []
-        global_id = 0
+    chunks = []
 
-        for page in pages:
-            page_num = page["page"]
-            text = page["text"]
+    start = 0
+    chunk_index = 0
 
-            # If text is shorter than chunk size, it forms a single chunk
-            if len(text) <= self.chunk_size:
-                chunks.append({
-                    "page": page_num,
-                    "chunk_index": 0,
-                    "chunk_id": global_id,
-                    "text": text
-                })
-                global_id += 1
-                continue
+    while start < len(text):
 
-            # Sliding window chunking
-            start = 0
-            chunk_index = 0
-            while start < len(text):
-                end = start + self.chunk_size
-                chunk_text = text[start:end]
+        end = start + chunk_size
 
-                chunks.append({
-                    "page": page_num,
-                    "chunk_index": chunk_index,
-                    "chunk_id": global_id,
-                    "text": chunk_text
-                })
+        chunks.append(
+            {
+                "chunk_index": chunk_index,
+                "text": text[start:end]
+            }
+        )
 
-                chunk_index += 1
-                global_id += 1
-                start += self.chunk_size - self.chunk_overlap
+        chunk_index += 1
+        start += chunk_size - overlap
 
-                # Prevent infinite loop if overlap is larger than or equal to chunk size
-                if self.chunk_size <= self.chunk_overlap:
-                    break
+    return chunks
 
-        return chunks
+
+def process_pages(
+    pages: list,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+):
+    """
+    Clean every page and split it into chunks.
+
+    Input:
+    [
+        {
+            "page":1,
+            "text":"..."
+        }
+    ]
+
+    Output:
+    [
+        {
+            "page":1,
+            "chunk_id":0,
+            "chunk_index":0,
+            "text":"..."
+        }
+    ]
+    """
+
+    all_chunks = []
+
+    chunk_id = 0
+
+    for page in pages:
+
+        cleaned = clean_text(page["text"])
+
+        if not cleaned:
+            continue
+
+        page_chunks = chunk_text(
+            cleaned,
+            chunk_size,
+            overlap,
+        )
+
+        for chunk in page_chunks:
+
+            all_chunks.append(
+                {
+                    "page": page["page"],
+                    "chunk_id": chunk_id,
+                    "chunk_index": chunk["chunk_index"],
+                    "text": chunk["text"],
+                }
+            )
+
+            chunk_id += 1
+
+    return all_chunks

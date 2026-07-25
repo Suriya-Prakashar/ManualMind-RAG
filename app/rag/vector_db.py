@@ -1,5 +1,4 @@
 import faiss
-import pickle
 import numpy as np
 from app.core.config import VECTORSTORE_DIR
 
@@ -23,39 +22,21 @@ class VectorDB:
             )
         )
 
-    def save(self, chunks):
+    def save(self):
         index_path = str(VECTORSTORE_DIR / "faiss.index")
-        metadata_path = str(VECTORSTORE_DIR / "metadata.pkl")
 
         faiss.write_index(
             self.index,
             index_path
         )
 
-        with open(
-            metadata_path,
-            "wb"
-        ) as f:
-
-            pickle.dump(chunks, f)
-
-        print("Vector Database Saved Successfully.")
+        print("FAISS Vector Index Saved Successfully.")
 
     def load(self):
         index_path = str(VECTORSTORE_DIR / "faiss.index")
-        metadata_path = str(VECTORSTORE_DIR / "metadata.pkl")
 
         self.index = faiss.read_index(
             index_path
         )
 
-        with open(
-            metadata_path,
-            "rb"
-        ) as f:
-
-            chunks = pickle.load(f)
-
-        print("Vector Database Loaded Successfully.")
-
-        return chunks
+        print("FAISS Vector Index Loaded Successfully.")

@@ -8,3 +8,5 @@ faiss-cpu
 sentence-transformers
 numpy
 httpx
+pymongo
+dnspython

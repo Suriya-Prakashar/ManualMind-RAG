@@ -28,6 +28,15 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# ============================
+# MongoDB Configuration
+# ============================
+
+MONGO_URI = os.getenv("MONGO_URI") or os.getenv("MONGO_DB") or "mongodb://localhost:27017"
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "manualmind_rag")
+MONGO_COLLECTION_NAME = os.getenv("MONGO_COLLECTION_NAME", "chunks")
+
+
 # ===========================
 # Retry Configuration
 # ===========================
