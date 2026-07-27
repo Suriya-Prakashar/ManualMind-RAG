@@ -64,7 +64,7 @@ FALLBACK_CHAIN = [
         "api_key": GROQ_API_KEY
     }
 ]
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+EMBEDDING_MODEL = "gemini/gemini-embedding-001"
 
 # ============================
 # RAG
@@ -75,5 +75,3 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
 TOP_K = 5
-
-print (DATA_DIR)

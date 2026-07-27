@@ -63,21 +63,29 @@ class MongoDatabase:
     def save_chunks(self, chunks: list):
         """
         Saves or updates chunk metadata documents in the database.
-        Each chunk is expected to be a dict containing:
-        - page: int
-        - chunk_id: int
-        - chunk_index: int
-        - text: str
+        Prevents inserting duplicate data if the identical dataset already exists.
         """
         if not self.is_connected:
             logger.warning("MongoDB not connected. Skipping save.")
             return False
 
         try:
-            # Clear old records first to avoid collision on unique index
+            # 1. Check if the identical dataset already exists to prevent duplicate entry
+            existing_count = self.collection.count_documents({})
+            if existing_count == len(chunks) and len(chunks) > 0:
+                first_match = self.collection.find_one({"chunk_id": 0, "text": chunks[0]["text"]})
+                mid_idx = len(chunks) // 2
+                mid_match = self.collection.find_one({"chunk_id": mid_idx, "text": chunks[mid_idx]["text"]})
+                last_match = self.collection.find_one({"chunk_id": len(chunks) - 1, "text": chunks[-1]["text"]})
+                
+                if first_match and mid_match and last_match:
+                    logger.info("Identical dataset already exists in MongoDB. Skipping save to prevent duplicate entries.")
+                    return True
+
+            # 2. If it's a new or modified dataset, clear old records to avoid collisions
             self.collection.delete_many({})
             
-            # Insert new chunks
+            # 3. Insert new chunks
             if chunks:
                 # Remove '_id' if present and ensure chunk_id matches list index
                 for idx, c in enumerate(chunks):
