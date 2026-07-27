@@ -23,20 +23,60 @@ class RAGPipeline:
         self.db = MongoDatabase()
         self.retriever = None
 
-        # Build or load index
-        self.initialize_index()
+        # Build or load index with robust error handling
+        try:
+            self.initialize_index()
+        except Exception as e:
+            logger.error(
+                f"\n" + "="*80 + "\n"
+                f"CRITICAL ERROR: Failed to initialize RAG Pipeline on startup: {e}\n"
+                f"The application will start, but queries to the /chat endpoint will fail.\n"
+                f"Please ensure MongoDB is online and the PDF manual is placed in '{PDF_PATH}'.\n"
+                f"="*80 + "\n"
+            )
+
+    def reconstruct_index_from_db(self):
+        """
+        Reconstructs the FAISS vector index using the chunks and embeddings already stored in MongoDB.
+        Avoids parsing the PDF and calling the Gemini embedding API again.
+        """
+        try:
+            logger.info("Local FAISS index missing but MongoDB contains data. Recreating FAISS index from MongoDB...")
+            all_chunks = list(self.db.collection.find({}))
+            if not all_chunks:
+                logger.warning("No chunks found in MongoDB. Cannot reconstruct FAISS index.")
+                return False
+
+            # Sort chunks by chunk_id to ensure order matches original document sequence
+            all_chunks.sort(key=lambda x: x.get("chunk_id", 0))
+
+            embeddings = []
+            for idx, c in enumerate(all_chunks):
+                if "embedding" not in c or not c["embedding"]:
+                    logger.warning(f"Chunk at index {idx} does not contain an embedding. Reconstruction aborted.")
+                    return False
+                embeddings.append(c["embedding"])
+
+            embeddings_arr = np.array(embeddings, dtype=np.float32)
+            self.vector_db.create_index(embeddings_arr)
+            self.vector_db.save()
+            self.retriever = Retriever(self.vector_db, self.embedder, self.db)
+            logger.info("Successfully recreated FAISS index from MongoDB chunks.")
+            return True
+        except Exception as e:
+            logger.error(f"Error recreating FAISS index from MongoDB: {e}")
+            return False
 
     def initialize_index(self, force_rebuild=False):
         index_path = VECTORSTORE_DIR / "faiss.index"
 
         # Check if MongoDB is connected and empty to trigger automatic ingestion
-        db_empty = False
+        db_empty = True
         if self.db.is_connected:
             try:
                 count = self.db.collection.count_documents({})
-                if count == 0:
-                    logger.info("MongoDB database is connected but has no documents. Forcing ingestion pipeline to inject data...")
-                    db_empty = True
+                if count > 0:
+                    db_empty = False
             except Exception as e:
                 logger.warning(f"Failed to verify MongoDB document count: {e}")
 
@@ -47,6 +87,12 @@ class RAGPipeline:
             
             if not self.db.is_connected:
                 logger.warning("MongoDB is offline. Dynamic metadata queries will fail.")
+        elif not force_rebuild and not db_empty and self.db.is_connected:
+            # Reconstruct FAISS index from MongoDB embeddings
+            success = self.reconstruct_index_from_db()
+            if not success:
+                logger.info("Rebuilding index from PDF as reconstruction from MongoDB failed...")
+                self.build_index()
         else:
             if db_empty:
                 logger.info("Initiating automatic data ingestion to populate MongoDB...")
