@@ -1,6 +1,6 @@
 # ManualMind RAG API
 
-ManualMind is a high-performance Retrieval-Augmented Generation (RAG) system designed for querying and interacting with PDF manuals (e.g., technical repair guides). It features a robust FastAPI backend, deep semantic search using FAISS and sentence-transformers, streaming response support, and intelligent LLM provider fallback capabilities.
+ManualMind is a high-performance Retrieval-Augmented Generation (RAG) system designed for querying and interacting with PDF manuals (e.g., technical repair guides). It features a robust FastAPI backend, deep semantic search using **MongoDB Atlas Vector Search**, streaming response support, and intelligent LLM provider fallback capabilities orchestrated via **LangChain**.
 
 ---
 
@@ -9,12 +9,12 @@ ManualMind is a high-performance Retrieval-Augmented Generation (RAG) system des
 - **FastAPI Backend**: Clean, asynchronous API endpoints for health monitoring and conversational chat.
 - **Advanced RAG Pipeline**:
   - **PDF Extraction**: Extracts text pages from PDF manuals via PyMuPDF.
-  - **Semantic Embeddings**: Generates highly accurate vector embeddings using `sentence-transformers`.
-  - **Vector Storage**: Employs FAISS-CPU for quick and efficient similarity search.
+  - **Semantic Embeddings**: Generates highly accurate vector embeddings using Google's `gemini-embedding-001` via LangChain.
+  - **Vector Storage**: Employs MongoDB Atlas Vector Search for unified, scalable vector indexes (no local index files required).
 - **Robust LLM Client**:
-  - Powered by `litellm` for standardized API calling.
-  - Intelligent fallback mechanism (e.g., transitions smoothly from Gemini to Groq if the main provider encounters rate-limiting or service errors).
-- **Streaming & Normal Response Modes**: Supports standard JSON responses as well as Chunked NDJSON stream responses (`StreamingResponse`) for real-time output rendering.
+  - Powered by **LangChain** for standardized API calling and orchestration.
+  - Intelligent fallback mechanism (transitions smoothly from Gemini to Groq if the main provider encounters rate-limiting or service errors).
+- **Streaming & Normal Response Modes**: Supports standard JSON responses as well as Server-Sent Events (SSE) streaming responses (`StreamingResponse`) for real-time output rendering.
 - **Clean Architecture**: Decoupled modules for RAG, schema definition, configurations, and core services.
 
 ---
@@ -22,26 +22,26 @@ ManualMind is a high-performance Retrieval-Augmented Generation (RAG) system des
 ## Project Structure
 
 ```text
-ManualMind-RAG/
+manualmind-backend/
 ├── app/
 │   ├── api/
 │   │   └── routes.py          # API route definitions (/health, /chat)
 │   ├── core/
 │   │   ├── config.py          # App configuration, paths, and settings
+│   │   ├── database.py        # MongoDB connection and Atlas Vector Search queries
 │   │   └── prompt.py          # LLM prompt templates for RAG
 │   ├── models/
 │   │   └── schema.py          # Pydantic schemas for request/response models
 │   ├── rag/
-│   │   ├── cleaner.py         # Text preprocessing and cleaning
-│   │   ├── embedder.py        # Vector embedding generator
-│   │   ├── pdf_uploader.py    # Handler for PDF loading and tracking
+│   │   ├── cleaner.py         # Custom page-and-word boundary text chunking
+│   │   ├── embedder.py        # Vector embedding generator (Gemini embeddings)
+│   │   ├── pdf_uploader.py    # Handler for PDF loading and parsing
 │   │   ├── pipeline.py        # Orchestrates retrieval and context synthesis
-│   │   ├── retriever.py       # Retrieves relevant context from vector database
-│   │   └── vector_db.py       # FAISS vector store manager
+│   │   └── retriever.py       # Retrieves relevant context using MongoDB Atlas Vector Search
 │   ├── services/
-│   │   ├── fallback.py        # LiteLLM normal fallback generation service
-│   │   ├── llm.py             # Basic LLM utilities
-│   │   └── streaming.py       # LiteLLM streaming generator service
+│   │   ├── fallback.py        # LangChain fallback generation service (Gemini -> Groq)
+│   │   ├── llm.py             # Basic LLM utilities using ChatGroq
+│   │   └── streaming.py       # LangChain streaming generator service
 │   ├── test_rag/
 │   │   ├── interactive_rag.py # CLI interactive tool for testing retrieval
 │   │   ├── test_chat_api.py   # API integration tests
@@ -50,8 +50,7 @@ ManualMind-RAG/
 │   │   └── logger.py          # Logger configuration
 │   └── main.py                # FastAPI entry point
 ├── data/
-│   ├── manuals/               # Directory for source PDF files
-│   └── vectorstore/           # Cached FAISS index and database files
+│   └── manuals/               # Directory for source PDF files
 ├── .env                       # Local environment secrets and keys
 ├── .gitignore                 # Untracked files configuration
 ├── requirements.txt           # Project dependencies list
@@ -65,11 +64,12 @@ ManualMind-RAG/
 ### Prerequisites
 - Python 3.9 or higher
 - pip (Python package installer)
+- Running MongoDB Atlas Cluster (with a vector search index created)
 
 ### 1. Clone & Navigate
 ```bash
 git clone https://github.com/Suriya-Prakashar/ManualMind-RAG.git
-cd ManualMind-RAG
+cd ManualMind-RAG/manualmind-backend
 ```
 
 ### 2. Install Dependencies
@@ -78,10 +78,13 @@ pip install -r requirements.txt
 ```
 
 ### 3. Environment Configuration
-Create a `.env` file in the root directory (or update the existing one) with your API keys:
+Create a `.env` file in the root directory (or update the existing one) with your API keys and MongoDB settings:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 GROQ_API_KEY=your_groq_api_key_here
+MONGO_URI=your_mongodb_atlas_uri_here
+MONGO_DB_NAME=manualmind_rag
+MONGO_COLLECTION_NAME=chunks
 ```
 
 ---
@@ -114,16 +117,15 @@ Interactive API documentation (Swagger UI) is available at: `http://127.0.0.1:80
 
 ### 2. Chat (RAG-Augmented)
 - **Endpoint**: `POST /chat`
-- **Description**: Submits a question, performs semantic search over the manuals, and returns context-aware replies generated by the LLM.
+- **Description**: Submits a question, performs semantic search over MongoDB Atlas, and returns context-aware replies generated by the LLM.
 - **Request Body**:
   ```json
   {
-    "question": "How do I replace the engine oil filter?",
-    "stream": false
+    "question": "How do I replace the engine oil filter?"
   }
   ```
-- **Optional Query Parameter**:
-  - `stream=true` (Overrides body parameter to enable chunked Streaming Responses).
+- **Optional Custom Headers / Functionality**:
+  - Automatic streaming failover handles and processes real-time chunked responses if standard normal responses fail.
 
 ---
 
@@ -133,10 +135,10 @@ To verify that the RAG pipeline is working correctly, you can run the test files
 
 ```bash
 # Run RAG pipeline tests
-python -m unittest app/test_rag/test_pipeline.py
+python app/test_rag/test_pipeline.py
 
 # Run API integration tests
-python -m unittest app/test_rag/test_chat_api.py
+python app/test_rag/test_chat_api.py
 
 # Run CLI interactive RAG shell
 python app/test_rag/interactive_rag.py
