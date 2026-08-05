@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+from pymongo.errors import OperationFailure
 from app.core.config import MONGO_URI, MONGO_DB_NAME, MONGO_COLLECTION_NAME
 from app.utils.logger import get_logger
 
@@ -35,6 +36,7 @@ class MongoDatabase:
             self.collection.create_index("chunk_id", unique=True)
             self._connected = True
             logger.info("Successfully connected to MongoDB!")
+            self.ensure_vector_search_index()
         except Exception as e:
             self._connected = False
             err_msg = str(e)
@@ -113,3 +115,79 @@ class MongoDatabase:
         except Exception as e:
             logger.error(f"Error fetching chunks from MongoDB: {e}")
             return {}
+
+    def ensure_vector_search_index(self):
+        """
+        Creates the Atlas Vector Search index 'vector_index' if it doesn't already exist.
+        """
+        if not self._connected:
+            return
+        try:
+            from pymongo.operations import SearchIndexModel
+            # Check if it already exists
+            try:
+                existing_indexes = list(self.collection.list_search_indexes())
+                if any(idx.get("name") == "vector_index" for idx in existing_indexes):
+                    logger.info("Atlas Vector Search index 'vector_index' already exists.")
+                    return
+            except OperationFailure as e:
+                # If search index queries are not supported (e.g. local mongo), skip
+                logger.debug(f"Could not check search indexes: {e}")
+                return
+
+            logger.info("Creating Atlas Vector Search index 'vector_index'...")
+            model = SearchIndexModel(
+                definition={
+                    "fields": [
+                        {
+                            "type": "vector",
+                            "path": "embedding",
+                            "numDimensions": 768,
+                            "similarity": "cosine"
+                        }
+                    ]
+                },
+                name="vector_index",
+                type="vectorSearch"
+            )
+            self.collection.create_search_index(model=model)
+            logger.info("Atlas Vector Search index creation initiated.")
+        except Exception as e:
+            logger.warning(f"Failed to ensure Atlas Vector Search index: {e}")
+
+    def vector_search(self, query_vector: list, top_k: int) -> list:
+        """
+        Performs Atlas Vector Search using the '$vectorSearch' stage.
+        Returns a list of chunk documents with similarity scores.
+        """
+        if not self.is_connected:
+            logger.warning("MongoDB not connected. Vector search failed.")
+            return []
+
+        pipeline = [
+            {
+                "$vectorSearch": {
+                    "index": "vector_index",
+                    "path": "embedding",
+                    "queryVector": query_vector,
+                    "numCandidates": max(top_k * 10, 100),
+                    "limit": top_k
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "chunk_id": 1,
+                    "page": 1,
+                    "chunk_index": 1,
+                    "text": 1,
+                    "score": {"$meta": "vectorSearchScore"}
+                }
+            }
+        ]
+
+        try:
+            return list(self.collection.aggregate(pipeline))
+        except Exception as e:
+            logger.error(f"Error performing MongoDB vector search: {e}")
+            return []

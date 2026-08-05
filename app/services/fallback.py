@@ -1,7 +1,46 @@
 import time
-from litellm import completion
+from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.config import FALLBACK_CHAIN, MAX_RETRIES, RETRY_DELAY
 from app.core.prompt import SYSTEM_PROMPT
+
+
+def get_langchain_model(provider_name: str, model_name: str, api_key: str, temperature: float = 0.3):
+    model = model_name.split("/")[-1] if "/" in model_name else model_name
+
+    if provider_name.lower() == "gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=api_key,
+            temperature=temperature
+        )
+    elif provider_name.lower() == "groq":
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            model=model,
+            groq_api_key=api_key,
+            temperature=temperature
+        )
+    else:
+        raise ValueError(f"Unsupported provider: {provider_name}")
+
+
+def extract_text_from_content(content):
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        texts = []
+        for part in content:
+            if isinstance(part, str):
+                texts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                texts.append(part["text"])
+            elif hasattr(part, "text"):
+                texts.append(part.text)
+            elif hasattr(part, "get") and part.get("text"):
+                texts.append(part.get("text"))
+        return "".join(texts)
+    return str(content)
 
 
 class FallbackService:
@@ -26,28 +65,26 @@ class FallbackService:
                         f"[{provider['model']}] Attempt {attempt}/{MAX_RETRIES}"
                     )
 
-                    response = completion(
-                        model=provider["model"],
+                    llm = get_langchain_model(
+                        provider_name=provider["provider"],
+                        model_name=provider["model"],
                         api_key=provider["api_key"],
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": SYSTEM_PROMPT
-                            },
-                            {
-                                "role": "user",
-                                "content": user_content
-                            }
-                        ],
                         temperature=0.3
                     )
+
+                    messages = [
+                        SystemMessage(content=SYSTEM_PROMPT),
+                        HumanMessage(content=user_content)
+                    ]
+
+                    response = llm.invoke(messages)
 
                     print(
                         f"{provider['model']} Success"
                     )
 
                     return {
-                        "reply": response.choices[0].message.content,
+                        "reply": extract_text_from_content(response.content),
                         "provider": provider["provider"],
                         "model": provider["model"],
                         "fallback": idx > 0
@@ -58,7 +95,7 @@ class FallbackService:
                     last_error = e
 
                     print(
-                        f"{provider['model']} Failed (Attempt {attempt})"
+                        f"{provider['model']} Failed (Attempt {attempt}): {e}"
                     )
 
                     if attempt < MAX_RETRIES:
@@ -76,5 +113,6 @@ class FallbackService:
         raise Exception(
             f"All providers failed.\n{last_error}"
         )
+
 
       

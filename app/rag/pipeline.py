@@ -1,13 +1,10 @@
 from pathlib import Path
 import os
-import faiss
-import numpy as np
 
-from app.core.config import PDF_PATH, VECTORSTORE_DIR, TOP_K
+from app.core.config import PDF_PATH, TOP_K
 from app.rag.pdf_uploader import PDFLoader
 from app.rag.cleaner import process_pages
 from app.rag.embedder import Embedder
-from app.rag.vector_db import VectorDB
 from app.rag.retriever import Retriever
 from app.core.database import MongoDatabase
 from app.utils.logger import get_logger
@@ -19,9 +16,8 @@ class RAGPipeline:
 
     def __init__(self):
         self.embedder = Embedder()
-        self.vector_db = VectorDB()
         self.db = MongoDatabase()
-        self.retriever = None
+        self.retriever = Retriever(self.embedder, self.db)
 
         # Build or load index with robust error handling
         try:
@@ -35,41 +31,7 @@ class RAGPipeline:
                 f"="*80 + "\n"
             )
 
-    def reconstruct_index_from_db(self):
-        """
-        Reconstructs the FAISS vector index using the chunks and embeddings already stored in MongoDB.
-        Avoids parsing the PDF and calling the Gemini embedding API again.
-        """
-        try:
-            logger.info("Local FAISS index missing but MongoDB contains data. Recreating FAISS index from MongoDB...")
-            all_chunks = list(self.db.collection.find({}))
-            if not all_chunks:
-                logger.warning("No chunks found in MongoDB. Cannot reconstruct FAISS index.")
-                return False
-
-            # Sort chunks by chunk_id to ensure order matches original document sequence
-            all_chunks.sort(key=lambda x: x.get("chunk_id", 0))
-
-            embeddings = []
-            for idx, c in enumerate(all_chunks):
-                if "embedding" not in c or not c["embedding"]:
-                    logger.warning(f"Chunk at index {idx} does not contain an embedding. Reconstruction aborted.")
-                    return False
-                embeddings.append(c["embedding"])
-
-            embeddings_arr = np.array(embeddings, dtype=np.float32)
-            self.vector_db.create_index(embeddings_arr)
-            self.vector_db.save()
-            self.retriever = Retriever(self.vector_db, self.embedder, self.db)
-            logger.info("Successfully recreated FAISS index from MongoDB chunks.")
-            return True
-        except Exception as e:
-            logger.error(f"Error recreating FAISS index from MongoDB: {e}")
-            return False
-
     def initialize_index(self, force_rebuild=False):
-        index_path = VECTORSTORE_DIR / "faiss.index"
-
         # Check if MongoDB is connected and empty to trigger automatic ingestion
         db_empty = True
         if self.db.is_connected:
@@ -80,32 +42,20 @@ class RAGPipeline:
             except Exception as e:
                 logger.warning(f"Failed to verify MongoDB document count: {e}")
 
-        if not force_rebuild and index_path.exists() and not db_empty:
-            logger.info("Loading existing FAISS vector database...")
-            self.vector_db.load()
-            self.retriever = Retriever(self.vector_db, self.embedder, self.db)
-            
+        if not force_rebuild and not db_empty:
+            logger.info("MongoDB contains data. RAG Pipeline is ready for queries.")
             if not self.db.is_connected:
-                logger.warning("MongoDB is offline. Dynamic metadata queries will fail.")
-        elif not force_rebuild and not db_empty and self.db.is_connected:
-            # Reconstruct FAISS index from MongoDB embeddings
-            success = self.reconstruct_index_from_db()
-            if not success:
-                logger.info("Rebuilding index from PDF as reconstruction from MongoDB failed...")
-                self.build_index()
+                logger.warning("MongoDB is offline. Queries will fail.")
         else:
             if db_empty:
                 logger.info("Initiating automatic data ingestion to populate MongoDB...")
             else:
-                logger.info("Vector database index not found or rebuild requested. Initiating ingestion pipeline...")
+                logger.info("Vector database rebuild requested. Initiating ingestion pipeline...")
             self.build_index()
 
     def build_index(self):
         if not self.db.is_connected:
-            raise RuntimeError("MongoDB is not connected. MongoDB is required to store chunk metadata.")
-
-        # Create output directory if it doesn't exist
-        VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
+            raise RuntimeError("MongoDB is not connected. MongoDB is required to store chunk metadata and embeddings.")
 
         # 1. Load PDF
         logger.info(f"Loading PDF from {PDF_PATH}...")
@@ -120,14 +70,7 @@ class RAGPipeline:
         logger.info(f"Generating embeddings for {len(chunks)} chunks...")
         embedded_chunks = self.embedder.embed_documents(chunks)
 
-        # 4. Create and Save Vector DB
-        logger.info("Creating FAISS index...")
-        embeddings = [ec["embedding"] for ec in embedded_chunks]
-        embeddings_arr = np.array(embeddings, dtype=np.float32)
-        self.vector_db.create_index(embeddings_arr)
-        self.vector_db.save()
-
-        # Save to MongoDB (including the embedding converted to serializable list)
+        # 4. Save to MongoDB (including the embedding converted to serializable list)
         logger.info("Saving chunks and embeddings to MongoDB...")
         chunks_to_save = []
         for ec in embedded_chunks:
@@ -136,13 +79,9 @@ class RAGPipeline:
             chunks_to_save.append(chunk_copy)
 
         self.db.save_chunks(chunks_to_save)
-
-        # 5. Initialize retriever
-        self.retriever = Retriever(self.vector_db, self.embedder, self.db)
         logger.info("Ingestion pipeline completed successfully.")
 
     def query(self, question: str, top_k: int = TOP_K) -> list:
         if not self.retriever:
             raise ValueError("Retriever is not initialized. Please build or load the index first.")
         return self.retriever.search(question, top_k=top_k)
-

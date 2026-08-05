@@ -1,7 +1,8 @@
 import json
 import time
-from litellm import completion
-
+from langchain_core.messages import SystemMessage, HumanMessage
+from app.services.fallback import get_langchain_model
+from app.services.llm import extract_text_from_content
 from app.core.config import FALLBACK_CHAIN, MAX_RETRIES, RETRY_DELAY
 from app.core.prompt import SYSTEM_PROMPT
 
@@ -28,30 +29,27 @@ class StreamingService:
 
                     print(f"[{provider['model']}] Streaming Attempt {attempt}/{MAX_RETRIES}")
 
-                    response = completion(
-                        model=provider["model"],
+                    llm = get_langchain_model(
+                        provider_name=provider["provider"],
+                        model_name=provider["model"],
                         api_key=provider["api_key"],
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": SYSTEM_PROMPT
-                            },
-                            {
-                                "role": "user",
-                                "content": user_content
-                            }
-                        ],
-                        stream=True,
                         temperature=0.3
                     )
-                    
+
+                    messages = [
+                        SystemMessage(content=SYSTEM_PROMPT),
+                        HumanMessage(content=user_content)
+                    ]
+
+                    response = llm.stream(messages)
+
                     # Validate the stream by fetching the first chunk
                     response_iter = iter(response)
                     try:
                         first_chunk = next(response_iter)
                     except StopIteration:
                         first_chunk = None
-                    
+
                     provider_info = {
                         "provider": provider["provider"],
                         "model": provider["model"],
@@ -85,17 +83,14 @@ class StreamingService:
         }) + "\n"
 
         # Yield the first chunk's content if present
-        if first_chunk and first_chunk.choices and first_chunk.choices[0].delta.content:
+        if first_chunk and hasattr(first_chunk, "content") and first_chunk.content:
             yield json.dumps({
-                "reply": first_chunk.choices[0].delta.content
+                "reply": extract_text_from_content(first_chunk.content)
             }) + "\n"
 
         # Yield the remaining chunks
         for chunk in response_iter:
-            if (
-                chunk.choices
-                and chunk.choices[0].delta.content
-            ):
+            if hasattr(chunk, "content") and chunk.content:
                 yield json.dumps({
-                    "reply": chunk.choices[0].delta.content
+                    "reply": extract_text_from_content(chunk.content)
                 }) + "\n"
